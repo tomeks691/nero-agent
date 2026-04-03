@@ -8,20 +8,57 @@ Inspirowany KAIROS_DREAM z Claude Code.
   consolidate — każdy klaster scal w jedno wspomnienie (przez Gemma)
   prune     — usuń oryginały, zapisz scalone
 
-Uruchamiany w tle co ~50 ticków przez consciousness.py
+Trigger: min 6h od ostatniej konsolidacji ORAZ min 3 ticki od ostatniej.
+Lepsze niż stały tick % 50.
 """
 
+import json
 import threading
 import time
-from datetime import datetime
+from datetime import datetime, timedelta
+from pathlib import Path
 
+DREAM_STATE_FILE = Path("/home/tom/nero/memory/dream_state.json")
+MIN_HOURS = 6
+MIN_TICKS_SINCE = 3
 
 _dream_lock = threading.Lock()
 _dreaming   = False
+_ticks_since_dream = 0
+
+
+def _load_state() -> dict:
+    if not DREAM_STATE_FILE.exists():
+        return {"last_consolidated_at": None, "total_dreams": 0}
+    try:
+        return json.loads(DREAM_STATE_FILE.read_text())
+    except Exception:
+        return {"last_consolidated_at": None, "total_dreams": 0}
+
+
+def _save_state(state: dict):
+    DREAM_STATE_FILE.write_text(json.dumps(state, indent=2))
 
 
 def is_dreaming() -> bool:
     return _dreaming
+
+
+def should_dream() -> bool:
+    """Sprawdź czy czas na konsolidację (6h + min 3 ticki)."""
+    global _ticks_since_dream
+    _ticks_since_dream += 1
+    if _ticks_since_dream < MIN_TICKS_SINCE:
+        return False
+    state = _load_state()
+    last = state.get("last_consolidated_at")
+    if last is None:
+        return True
+    try:
+        last_dt = datetime.fromisoformat(last)
+        return datetime.now() - last_dt >= timedelta(hours=MIN_HOURS)
+    except Exception:
+        return True
 
 
 def run_dream(memory, log_fn=print) -> dict:
@@ -77,6 +114,14 @@ def run_dream(memory, log_fn=print) -> dict:
 
         log_fn(f"[dream] Faza 4/4: prune gotowe | scalono: {stats['merged']} klastrów, usunięto: {stats['pruned']} wspomnień")
         log_fn(f"[dream] Wspomnień po: {memory.count()}")
+
+        # Zapisz stan konsolidacji
+        state = _load_state()
+        state["last_consolidated_at"] = datetime.now().isoformat()
+        state["total_dreams"] = state.get("total_dreams", 0) + 1
+        _save_state(state)
+        global _ticks_since_dream
+        _ticks_since_dream = 0
 
     except Exception as e:
         import traceback

@@ -13,7 +13,9 @@ from pathlib import Path
 
 sys.path.insert(0, "/home/tom/nero")
 from memory.memory import NeroMemory
-from memory.dream import start_dream_background, is_dreaming
+from memory.dream import start_dream_background, is_dreaming, should_dream
+from memory.cron import get_due_jobs, mark_fired, list_jobs, add_job, delete_job
+from memory.skill_improvement import start_skill_improvement_background, read_all_skills
 from memory.drives import NeroDrives
 from lab.web_search import research
 import core.brain as brain
@@ -48,6 +50,7 @@ class NeroConsciousness:
         self._history_path = Path("/home/tom/nero/memory/action_history.json")
         self._recent_search_queries, self._recent_shell_cmds = self._load_history()
         self._hn_headlines = ""         # ostatnie nagłówki HN jako inspiracja
+        self._last_user_time = time.time()  # kiedy ostatnio Tomek napisał (away summary)
         self._bootstrap_knowledge()
         self.lab = NeroLab()
         print(f"\n[nero] Consciousness online | {datetime.now().strftime('%Y-%m-%d %H:%M')}")
@@ -69,12 +72,16 @@ class NeroConsciousness:
         mem_hits = self.memory.search(active_goal, top_k=3) if active_goal else []
         mem_context = "\n".join(f"- {m['content'][:120]}" for m in mem_hits) if mem_hits else None
 
+        # Dołącz skill files jako dodatkowy kontekst
+        skills = read_all_skills()
+        full_context = "\n\n".join(filter(None, [mem_context, skills])) or None
+
         thought = brain.think(
             drives=self.drives.drives,
             recent_conclusions=self._last_conclusions(3),
             goal=self.subgoal or self.goal,
             recent_creations=recent_c,
-            memory_context=mem_context
+            memory_context=full_context
         )
         self.memory.store(thought, "thought")
         return thought
@@ -238,9 +245,24 @@ class NeroConsciousness:
         self._log(f"--- Tick {self.tick} | drives: {self.drives.dominant()} ---")
 
         # Wiadomości z Discord inbox (bufor gdy bot był offline)
-        for msg in inbox_pop_all():
-            self._log(f"[discord inbox] {msg['author']}: {msg['content'][:80]}")
-            self.respond_to_user(msg['content'])
+        inbox_msgs = inbox_pop_all()
+        if inbox_msgs:
+            # Away summary — jeśli Tomek nie pisał > 2h, przywitaj go podsumowaniem
+            hours_away = (time.time() - self._last_user_time) / 3600
+            if hours_away >= 2.0:
+                self._log(f"[away] Tomek wrócił po {hours_away:.1f}h — generuję podsumowanie")
+                summary = brain.generate_away_summary(
+                    self._last_conclusions(8),
+                    [m["content"] for m in self.memory.recent(5, memory_type="thought")],
+                    hours_away
+                )
+                if summary:
+                    self._pending_messages.append(summary)
+                    self._log(f"[away] {summary[:100]}")
+            self._last_user_time = time.time()
+            for msg in inbox_msgs:
+                self._log(f"[discord inbox] {msg['author']}: {msg['content'][:80]}")
+                self.respond_to_user(msg['content'])
         if self.tick % 10 == 0:
             self._print_stats()
         if self.tick % 15 == 0:
@@ -258,9 +280,40 @@ class NeroConsciousness:
             self.memory.store(ctx, "observation", {"source": "world_info"})
             self._log("[world] " + ctx)
 
-        # Dream mode — konsolidacja pamięci co 50 ticków
-        if self.tick % 50 == 0 and not is_dreaming():
+        # Dream mode — konsolidacja pamięci (min 6h + min 3 ticki od ostatniej)
+        if should_dream() and not is_dreaming():
             start_dream_background(self.memory, self._log)
+
+        # Skill improvement — co 25 ticków Nero aktualizuje własne umiejętności
+        if self.tick % 25 == 0:
+            start_skill_improvement_background(self.memory, brain, self._log)
+
+        # Cron jobs — sprawdź czy jest coś do wykonania
+        for job in get_due_jobs():
+            self._log(f"[cron] Wykonuję: {job['prompt'][:60]}")
+            thought = brain.think(
+                self.drives.drives,
+                self._last_conclusions(3),
+                goal=job["prompt"]
+            )
+            if thought:
+                self.memory.store(thought, "thought", {"source": "cron", "cron_id": job["id"]})
+                self._pending_messages.append(f"[cron] {thought[:200]}")
+            mark_fired(job["id"])
+
+        # Co 40 ticków Nero może zaplanować nowe zadanie cron
+        if self.tick % 40 == 0 and random.random() < 0.3:
+            action = brain.decide_cron_action(
+                self._last_conclusions(5),
+                list_jobs(),
+                self.drives.drives
+            )
+            if action:
+                try:
+                    job = add_job(action["prompt"], action["cron_expr"], action["recurring"])
+                    self._log(f"[cron] Zaplanowano: {job['cron_expr']} | {job['prompt'][:50]}")
+                except Exception as e:
+                    self._log(f"[cron] Błąd planowania: {e}")
 
         # HN headlines — co 30 ticków jako inspiracja dla nowych tematów
         if self.tick % 30 == 0:

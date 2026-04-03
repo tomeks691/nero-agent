@@ -491,3 +491,69 @@ def verify_code(code: str) -> tuple[str, str | None]:
         return "FAIL", None
     return "PASS", None
 
+
+# ─── Away Summary ─────────────────────────────────────────────────────────────
+
+def generate_away_summary(recent_conclusions: list, recent_thoughts: list, hours_away: float) -> str | None:
+    """Generuj podsumowanie dla Tomka który wrócił po dłuższej przerwie."""
+    cls = "\n".join(f"- {c[:120]}" for c in recent_conclusions[-8:]) or "- brak"
+    thoughts = "\n".join(f"- {t[:100]}" for t in recent_thoughts[-5:]) or "- brak"
+    h = int(hours_away)
+    prompt = "\n".join([
+        f"Tomek wrócił po {h} godzinach nieobecności. Przywitaj go i powiedz co robiłeś przez ten czas.",
+        "Ostatnie odkrycia i wnioski:",
+        cls,
+        "Ostatnie myśli:",
+        thoughts,
+        "",
+        "Napisz 2-3 zdania po polsku: przywitaj Tomka i streść co odkryłeś lub zrobiłeś. Bądź konkretny.",
+    ])
+    return ask(prompt, max_tokens=200, temp=0.75, priority=True)
+
+
+# ─── Cron Decision ────────────────────────────────────────────────────────────
+
+def decide_cron_action(recent_conclusions: list, existing_jobs: list, drives: dict) -> dict | None:
+    """
+    Nero decyduje czy chce zaplanować nowe zadanie cron.
+    Zwraca dict {prompt, cron_expr, recurring} lub None.
+    """
+    dominant = max(drives, key=lambda k: drives[k])
+    cls = "\n".join(f"- {c[:100]}" for c in recent_conclusions[-5:]) or "- brak"
+    jobs_str = "\n".join(f"- [{j['id']}] {j['cron_expr']} | {j['prompt'][:60]}" for j in existing_jobs) or "- brak"
+
+    prompt = "\n".join([
+        "Jesteś Nero. Możesz zaplanować automatyczne zadanie które będzie się powtarzać.",
+        f"Teraz czujesz: {dominant}",
+        "Ostatnie wnioski:",
+        cls,
+        "Już zaplanowane zadania:",
+        jobs_str,
+        "",
+        "Czy chcesz zaplanować nowe automatyczne zadanie? (np. 'co godzinę sprawdzaj postęp celu', 'codziennie o 9 szukaj nowości')",
+        "Jeśli TAK — napisz w formacie:",
+        "PROMPT: [co ma się wykonać]",
+        "CRON: [wyrażenie cron, np. '0 9 * * *' albo '*/30 * * * *']",
+        "RECURRING: [TAK lub NIE]",
+        "Jeśli NIE — napisz tylko: NIE",
+    ])
+
+    result = ask(prompt, max_tokens=100, temp=0.5)
+    if not result or "NIE" in result.upper()[:10]:
+        return None
+
+    try:
+        lines = {}
+        for line in result.strip().split("\n"):
+            if ":" in line:
+                k, v = line.split(":", 1)
+                lines[k.strip().upper()] = v.strip()
+        p = lines.get("PROMPT", "")
+        c = lines.get("CRON", "")
+        r = lines.get("RECURRING", "TAK")
+        if p and c:
+            return {"prompt": p, "cron_expr": c, "recurring": "NIE" not in r.upper()}
+    except Exception:
+        pass
+    return None
+
