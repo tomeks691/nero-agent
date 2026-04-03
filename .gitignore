@@ -1,0 +1,29 @@
+# Sekrety
+.env
+*.key
+*.pem
+
+# Python
+__pycache__/
+*.pyc
+*.pyo
+venv/
+.venv/
+*.egg-info/
+
+# Dane lokalne
+memory/qdrant/
+memory/drives.json
+memory/tasks.json
+memory/schedule.json
+memory/goals.json
+memory/action_history.json
+logs/
+notes/
+scratch/
+models/
+
+# IDE
+.vscode/
+.idea/
+*.bak
