@@ -596,3 +596,34 @@ def should_exit_conversation_mode(recent_messages: list) -> bool:
     ])
     result = ask(prompt, max_tokens=5, temp=0.1)
     return bool(result and "TAK" in result.upper())
+
+
+def decide_agenda_action(current_topic: dict, recent_conclusions: list, drives: dict) -> dict | None:
+    """Nero decyduje co zrobic z aktualnym tematem agendy: kontynuuj, zakoncz, dodaj nowy."""
+    if not current_topic:
+        return None
+    dominant = max(drives, key=lambda k: drives[k])
+    cls_str = "\n".join(f"- {c}" for c in recent_conclusions[-5:]) or "- brak"
+    prompt = "\n".join([
+        "Jestes Nero. Masz wlasna agenda — liste tematow ktore chcesz zrealizowac.",
+        f"Aktualny temat (priorytet {current_topic.get('priority',5)}/10):",
+        current_topic.get('topic', ''),
+        f"Notatki: {current_topic.get('notes', 'brak')}",
+        "",
+        "Ostatnie wnioski z pracy nad tym tematem:",
+        cls_str,
+        f"Aktualne odczucie: {dominant}",
+        "",
+        "Co chcesz teraz zrobic? Odpowiedz w formacie JSON:",
+        '{"action": "continue"|"complete"|"add_new", "notes": "krotka notatka o postepach", "new_topic": "nowy temat jesli action=add_new", "new_priority": 5}',
+        "Odpowiedz TYLKO JSON, bez kodu markdown.",
+    ])
+    result = ask(prompt, max_tokens=150, temp=0.4)
+    if not result:
+        return None
+    try:
+        # wyczysc markdown
+        result = result.strip().strip("```json").strip("```").strip()
+        return json.loads(result)
+    except Exception:
+        return None

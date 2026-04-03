@@ -13,6 +13,7 @@ from pathlib import Path
 
 sys.path.insert(0, "/home/tom/nero")
 from memory.memory import NeroMemory
+from memory.agenda import get_current, add_topic, complete_topic, update_notes, summary as agenda_summary
 from memory.dream import start_dream_background, is_dreaming, should_dream
 from memory.cron import get_due_jobs, mark_fired, list_jobs, add_job, delete_job
 from memory.skill_improvement import start_skill_improvement_background, read_all_skills
@@ -69,26 +70,46 @@ class NeroConsciousness:
             f.write(f"[{ts}] {msg}\n")
 
     def _think(self) -> str:
-        """Nero myśli przez LLM"""
+        """Nero mysli przez LLM — kierowany wlasna agenda, nie pamiecia"""
         recent_c = [m["content"][:100] for m in self.memory.recent(5, memory_type="thought")
                     if m.get("meta", {}).get("type") == "creation"]
-        # Kontekst z pamięci do myślenia
-        active_goal = self.subgoal or self.goal or self.drives.dominant()
-        mem_hits = self.memory.search(active_goal, top_k=3) if active_goal else []
+
+        # Agenda jako sterownik — co teraz chce robic?
+        current_agenda = get_current()
+        agenda_topic = current_agenda["topic"] if current_agenda else None
+
+        # Pamiec tylko jako kontekst do biezacego tematu z agendy
+        search_query = agenda_topic or self.drives.dominant()
+        mem_hits = self.memory.search(search_query, top_k=3) if search_query else []
         mem_context = "\n".join(f"- {m['content'][:120]}" for m in mem_hits) if mem_hits else None
 
-        # Dołącz skill files jako dodatkowy kontekst
+        # Agenda summary + skill files jako kontekst
         skills = read_all_skills()
-        full_context = "\n\n".join(filter(None, [mem_context, skills])) or None
+        agenda_str = agenda_summary()
+        full_context = "\n\n".join(filter(None, [agenda_str, mem_context, skills])) or None
 
         thought = brain.think(
             drives=self.drives.drives,
             recent_conclusions=self._last_conclusions(3),
-            goal=self.subgoal or self.goal,
+            goal=agenda_topic or self.goal,
             recent_creations=recent_c,
             memory_context=full_context
         )
         self.memory.store(thought, "thought")
+
+        # Co 20 tickow — Nero ocenia postepy i aktualizuje agenda
+        if self.tick % 20 == 0 and current_agenda:
+            action = brain.decide_agenda_action(current_agenda, self._last_conclusions(5), self.drives.drives)
+            if action:
+                if action.get("action") == "complete":
+                    complete_topic(current_agenda["id"], action.get("notes", ""))
+                    self._log(f"[agenda] Ukonczono: {current_agenda['topic'][:60]}")
+                elif action.get("action") == "add_new" and action.get("new_topic"):
+                    add_topic(action["new_topic"], action.get("new_priority", 5))
+                    self._log(f"[agenda] Nowy temat: {action['new_topic'][:60]}")
+                elif action.get("notes"):
+                    update_notes(current_agenda["id"], action["notes"])
+
         return thought
 
     def _last_conclusions(self, n: int = 5) -> list[str]:
