@@ -28,7 +28,7 @@ def _worker_web(query: str, results: dict):
 
 def _worker_arxiv(query: str, results: dict):
     try:
-        from lab.arxiv_search import search as arxiv_search, format_for_analysis
+        from lab.semantic_search import search as arxiv_search, format_for_analysis
         papers = arxiv_search(query, max_results=2)
         if papers:
             results["arxiv"] = format_for_analysis(papers)[:800]

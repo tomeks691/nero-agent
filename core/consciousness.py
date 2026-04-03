@@ -28,7 +28,7 @@ from comms.npu_agent import ask_npu, summarize, is_ready as npu_ready
 from tools.shell import run as shell_run
 from memory.tasks import add_task, get_pending, complete_task
 from lab.experiment import NeroLab
-from lab.arxiv_search import search as arxiv_search, format_for_analysis as arxiv_format
+from lab.semantic_search import search as arxiv_search, format_for_analysis as arxiv_format
 from tools.python_repl import run_code as py_run
 from tools.self_read import read_recent_log, read_journal, list_creations
 from lab.rss_feed import fetch_hn_top, headlines_text
