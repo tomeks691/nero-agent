@@ -78,9 +78,9 @@ class NeroConsciousness:
         current_agenda = get_current()
         agenda_topic = current_agenda["topic"] if current_agenda else None
 
-        # Pamiec tylko jako kontekst do biezacego tematu z agendy
+        # Pamiec: szukaj wspomnien POWIAZANYCH z tematem agendy, nie najnowszych
         search_query = agenda_topic or self.drives.dominant()
-        mem_hits = self.memory.search(search_query, top_k=3) if search_query else []
+        mem_hits = self.memory.search(search_query, top_k=4) if search_query else []
         mem_context = "\n".join(f"- {m['content'][:120]}" for m in mem_hits) if mem_hits else None
 
         # Agenda summary + skill files jako kontekst
@@ -88,9 +88,15 @@ class NeroConsciousness:
         agenda_str = agenda_summary()
         full_context = "\n\n".join(filter(None, [agenda_str, mem_context, skills])) or None
 
+        # Wnioski: filtruj do tematow agendy jesli agenda aktywna
+        if current_agenda:
+            agenda_conclusions = [m["content"] for m in self.memory.search(agenda_topic, top_k=5)]
+        else:
+            agenda_conclusions = self._last_conclusions(3)
+
         thought = brain.think(
             drives=self.drives.drives,
-            recent_conclusions=self._last_conclusions(3),
+            recent_conclusions=agenda_conclusions,
             goal=agenda_topic or self.goal,
             recent_creations=recent_c,
             memory_context=full_context
