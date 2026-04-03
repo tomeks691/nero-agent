@@ -38,6 +38,7 @@ def start_npu_server():
     if _npu_proc and _npu_proc.poll() is None:
         return
     print(f"[npu] Startuję Qwen2.5-3B na NPU (port {NPU_PORT})...")
+    time.sleep(15)  # poczekaj az llama-server zajmie zasoby
     _npu_proc = subprocess.Popen(
         ["flm", "serve", NPU_MODEL, "--port", str(NPU_PORT)],
         stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL
