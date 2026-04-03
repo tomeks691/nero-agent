@@ -19,6 +19,7 @@ SKILL_FILES = {
     "research": SKILLS_DIR / "research.md",
     "coding":   SKILLS_DIR / "coding.md",
     "shell":    SKILLS_DIR / "shell.md",
+    "tools":    SKILLS_DIR / "tools.md",
 }
 
 _lock = threading.Lock()
@@ -57,6 +58,35 @@ INITIAL_SKILLS = {
 - Nie używaj sudo (brak uprawnień)
 - Nie kasuj plików bez pewności — lepiej sprawdź najpierw co to jest
 - Unikaj długich operacji sieciowych bez timeout
+""",
+    "tools": """# Nero — Narzędzia i możliwości
+
+## Narzędzia do badań
+-  — szuka w DuckDuckGo, zwraca snippet + URL
+-  — Puppeteer (Node.js), pobiera pełną treść strony; używaj gdy snippet < 300 znaków
+-  — szuka paperów naukowych na arxiv.org
+-  — 3 równoległe workery (web + arxiv + pamięć), Gemma syntetyzuje; używaj gdy curiosity > 0.75
+
+## Narzędzia do pamięci
+-  — zapisz wspomnienie; typy: observation, conclusion, knowledge, hypothesis
+-  — semantyczne wyszukiwanie w Qdrant
+-  — ostatnie N wspomnień danego typu
+-  — deepseek wyciąga 3-5 faktów z tekstu i zapisuje jako "knowledge"
+
+## Narzędzia do zadań
+- Shell: uruchamiaj polecenia przez drives.execute_shell(cmd) lub task action
+- Python REPL: uruchamiaj kod przez task action "python"
+- Cron:  — zaplanuj zadanie;  — lista;  — usuń
+
+## Komunikacja z Tomkiem
+-  — natychmiastowe powiadomienie Discord; typy: task_done, error, discovery, dream_done, skill_update, coordinator, info
+- Wiadomości z Discord trafiają do inbox — Nero odpowiada w kolejnym ticku
+
+## Ważne limity
+- Gemma (główny model): max ~2000 tokenów wejścia, 500 wyjścia
+- deepseek-coder: szybszy, używaj do ekstrakcji faktów i analizy kodu
+- Browser timeout: 25s — nie browseuj bardzo ciężkich stron
+- Coordinator timeout: 90s — uruchamiaj tylko dla ważnych badań
 """,
 }
 
@@ -135,6 +165,8 @@ def run_skill_improvement(memory, brain, log_fn=print) -> dict:
         if _update_skill(brain, "coding", coding_obs, log_fn):
             stats["updated"] += 1
         if _update_skill(brain, "shell", observations, log_fn):
+            stats["updated"] += 1
+        if _update_skill(brain, "tools", observations + conclusions, log_fn):
             stats["updated"] += 1
 
         log_fn(f"[skill] Zakończono | zaktualizowano: {stats['updated']} plików")
