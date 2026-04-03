@@ -42,7 +42,7 @@ def start_npu_server():
         ["flm", "serve", NPU_MODEL, "--port", str(NPU_PORT)],
         stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL
     )
-    for i in range(60):
+    for i in range(90):
         if _check_server_alive():
             _npu_ready = True
             print("[npu] NPU agent gotowy")
@@ -56,9 +56,10 @@ def start_npu_server():
 
 def stop_npu_server():
     global _npu_proc, _npu_ready
-    if _npu_proc:
+    # Nie zabijaj jesli serwer nadal odpowiada — zostaw dla kolejnej instancji
+    if _npu_proc and not _check_server_alive():
         _npu_proc.terminate()
-        _npu_proc = None
+    _npu_proc = None
     _npu_ready = False
 
 
