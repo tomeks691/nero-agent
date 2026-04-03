@@ -109,15 +109,6 @@ class NeroConsciousness:
             add_task(message, source="user", priority="high")
             self.memory.store(f"Zadanie od Tomka: {message}", "task")
             self._log(f"[task] Nowe zadanie od Tomka: {message[:80]}")
-        # Czy ta wiadomość wymaga trybu skupionej rozmowy?
-        if not self._conv_mode:
-            ctx = [m['content'] for m in self.memory.recent(3, memory_type='conversation')]
-            if brain.should_enter_conversation_mode(message, ctx):
-                self._conv_mode = True
-                self._conv_ticks_without_msg = 0
-                self._log('[conv] Wchodzę w tryb skupionej rozmowy')
-        else:
-            self._conv_ticks_without_msg = 0
         import threading
         threading.Thread(target=self._reply_thread, args=(message,), daemon=True).start()
 
@@ -277,6 +268,16 @@ class NeroConsciousness:
             for msg in inbox_msgs:
                 self._log(f"[discord inbox] {msg['author']}: {msg['content'][:80]}")
                 self.respond_to_user(msg['content'])
+            # Czy wiadomosc wymaga trybu skupionej rozmowy? (synchronicznie — przed sprawdzeniem flagi)
+            if not self._conv_mode:
+                ctx = [m['content'] for m in self.memory.recent(3, memory_type='conversation')]
+                last_msg = inbox_msgs[-1]['content']
+                if brain.should_enter_conversation_mode(last_msg, ctx):
+                    self._conv_mode = True
+                    self._conv_ticks_without_msg = 0
+                    self._log('[conv] Wchodze w tryb skupionej rozmowy')
+            else:
+                self._conv_ticks_without_msg = 0
         # Conversation mode — zawieś ticki badawcze podczas głębokiej rozmowy
         if self._conv_mode:
             if not inbox_msgs:
