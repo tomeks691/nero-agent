@@ -54,6 +54,8 @@ class NeroConsciousness:
         self._recent_search_queries, self._recent_shell_cmds = self._load_history()
         self._hn_headlines = ""         # ostatnie nagłówki HN jako inspiracja
         self._last_user_time = time.time()  # kiedy ostatnio Tomek napisał (away summary)
+        self._conv_mode = False           # tryb skupionej rozmowy
+        self._conv_ticks_without_msg = 0  # ile ticków bez wiadomości w conv_mode
         self._bootstrap_knowledge()
         self.lab = NeroLab()
         print(f"\n[nero] Consciousness online | {datetime.now().strftime('%Y-%m-%d %H:%M')}")
@@ -107,6 +109,15 @@ class NeroConsciousness:
             add_task(message, source="user", priority="high")
             self.memory.store(f"Zadanie od Tomka: {message}", "task")
             self._log(f"[task] Nowe zadanie od Tomka: {message[:80]}")
+        # Czy ta wiadomość wymaga trybu skupionej rozmowy?
+        if not self._conv_mode:
+            ctx = [m['content'] for m in self.memory.recent(3, memory_type='conversation')]
+            if brain.should_enter_conversation_mode(message, ctx):
+                self._conv_mode = True
+                self._conv_ticks_without_msg = 0
+                self._log('[conv] Wchodzę w tryb skupionej rozmowy')
+        else:
+            self._conv_ticks_without_msg = 0
         import threading
         threading.Thread(target=self._reply_thread, args=(message,), daemon=True).start()
 
@@ -266,6 +277,20 @@ class NeroConsciousness:
             for msg in inbox_msgs:
                 self._log(f"[discord inbox] {msg['author']}: {msg['content'][:80]}")
                 self.respond_to_user(msg['content'])
+        # Conversation mode — zawieś ticki badawcze podczas głębokiej rozmowy
+        if self._conv_mode:
+            if not inbox_msgs:
+                self._conv_ticks_without_msg += 1
+            # Auto-wyjście po 4 tickach bez wiadomości
+            if self._conv_ticks_without_msg >= 4:
+                recent_conv = [m['content'] for m in self.memory.recent(6, memory_type='conversation')]
+                if brain.should_exit_conversation_mode(recent_conv):
+                    self._conv_mode = False
+                    self._conv_ticks_without_msg = 0
+                    self._log('[conv] Rozmowa zakończona — wracam do badań')
+            if self._conv_mode:
+                self.drives.save()
+                return  # zawieś wszystkie ticki badawcze
         if self.tick % 10 == 0:
             self._print_stats()
         if self.tick % 15 == 0:

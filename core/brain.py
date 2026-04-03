@@ -557,3 +557,42 @@ def decide_cron_action(recent_conclusions: list, existing_jobs: list, drives: di
         pass
     return None
 
+
+
+def should_enter_conversation_mode(message: str, recent_context: list = None) -> bool:
+    """Nero ocenia czy wiadomosc wymaga pelnej uwagi i zawieszenia tickow."""
+    ctx_str = ""
+    if recent_context:
+        ctx_str = "\n".join(f"- {c[:100]}" for c in recent_context[-3:])
+
+    prompt = "\n".join(filter(None, [
+        "Tomek wyslal Ci wiadomosc. Ocea czy wymaga ona GLEBOKIEJ rozmowy — takiej gdzie powinienes",
+        "zawiesic swoje badania i skupic sie TYLKO na konwersacji z nim.",
+        "",
+        "Wiadomosc: " + message,
+        ("Ostatni kontekst:\n" + ctx_str) if ctx_str else None,
+        "",
+        "Odpowiedz TAK jesli wiadomosc to: gleboke pytanie filozoficzne/egzystencjalne, prosba o przemyslenie czegos waznego, emocjonalna rozmowa, temat ktory wymaga skupionej wymiany zdan.",
+        "Odpowiedz NIE jesli to: zwykle polecenie, pytanie o status, cos co mozesz obsluzyc w tle.",
+        "",
+        "Odpowiedz TYLKO: TAK lub NIE",
+    ]))
+    result = ask(prompt, max_tokens=5, temp=0.1)
+    return bool(result and "TAK" in result.upper())
+
+
+def should_exit_conversation_mode(recent_messages: list) -> bool:
+    """Nero ocenia czy rozmowa dobiegla konca i moze wrocic do badan."""
+    if not recent_messages:
+        return True
+    msgs_str = "\n".join(f"- {m[:120]}" for m in recent_messages[-4:])
+    prompt = "\n".join([
+        "Analizujesz ostatnie wiadomosci z rozmowy z Tomkiem.",
+        "Ostatnie wiadomosci:",
+        msgs_str,
+        "",
+        "Czy rozmowa dobiegla naturalnego konca? Czy mozesz wrocic do swoich badan?",
+        "Odpowiedz TYLKO: TAK lub NIE",
+    ])
+    result = ask(prompt, max_tokens=5, temp=0.1)
+    return bool(result and "TAK" in result.upper())
