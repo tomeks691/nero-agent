@@ -20,7 +20,7 @@ def _worker_web(query: str, results: dict):
         from lab.web_search import research
         r = research(query)
         if r["found"]:
-            results["web"] = r["content"][:1200]
+            results["web"] = r["content"][:800]
             results["web_url"] = r.get("url", "")
     except Exception as e:
         results["web_error"] = str(e)
@@ -31,7 +31,7 @@ def _worker_arxiv(query: str, results: dict):
         from lab.arxiv_search import search as arxiv_search, format_for_analysis
         papers = arxiv_search(query, max_results=2)
         if papers:
-            results["arxiv"] = format_for_analysis(papers)[:1200]
+            results["arxiv"] = format_for_analysis(papers)[:800]
     except Exception as e:
         results["arxiv_error"] = str(e)
 
@@ -89,7 +89,7 @@ def run_coordinator(goal: str, memory, brain, log_fn=print) -> str | None:
         "Co nowego odkryłeś? Co jest kluczowe dla celu badawczego?",
     ]
 
-    synthesis = brain.ask("\n".join(parts), max_tokens=350, temp=0.7)
+    synthesis = brain.ask("\n".join(parts), max_tokens=500, temp=0.7)
     if synthesis:
         log_fn(f"[coordinator] Synteza: {synthesis[:120]}")
     return synthesis
