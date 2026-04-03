@@ -414,7 +414,7 @@ class NeroConsciousness:
         elif self.drives.drives["curiosity"] > 0.5 and random.random() < 0.4:
             # Szukaj w internecie — NPU streszcza wyniki jeśli dostępne
             recent_thoughts = [m["content"] for m in self.memory.recent(5, memory_type="thought")]
-            query = brain.generate_search_query(recent_thoughts, self._last_conclusions(3), self._recent_search_queries)
+            query = brain.generate_search_query(recent_thoughts, self._last_conclusions(3), list(self._recent_search_queries))
             if query:
                 self._recent_search_queries.append(query)
                 self._save_history()
@@ -444,7 +444,7 @@ class NeroConsciousness:
         elif self.drives.drives["curiosity"] > 0.6 and random.random() < 0.25:
             # ArXiv — szukaj prawdziwych paperów naukowych
             recent_thoughts = [m["content"] for m in self.memory.recent(5, memory_type="thought")]
-            query = brain.generate_search_query(recent_thoughts, self._last_conclusions(3), self._recent_search_queries)
+            query = brain.generate_search_query(recent_thoughts, self._last_conclusions(3), list(self._recent_search_queries))
             if query:
                 self._log("[arxiv] Szukam: " + query)
                 papers = arxiv_search(query, max_results=2)
@@ -505,7 +505,7 @@ class NeroConsciousness:
                 recent_observations=self._last_conclusions(3),
                 drives=self.drives.drives,
                 goal=self.goal,
-                recent_commands=self._recent_shell_cmds
+                recent_commands=list(self._recent_shell_cmds)
             )
             if cmd:
                 self._recent_shell_cmds.append(cmd)

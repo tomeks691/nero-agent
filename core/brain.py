@@ -218,7 +218,7 @@ def generate_search_query(recent_thoughts: list, recent_conclusions: list, recen
         conclusions_str,
     ]
     if recent_queries:
-        already = "\n".join(f"- {q}" for q in list(recent_queries)[-5:])
+        already = "\n".join(f"- {q}" for q in recent_queries[-5:])
         parts.append(f"Ostatnio już szukałeś (nie powtarzaj tych samych):\n{already}")
     parts.append("Write ONLY the query in English (max 5 words), nothing else:")
     prompt = "\n".join(parts)
@@ -285,7 +285,7 @@ def decide_shell_command(recent_thoughts: list, recent_observations: list, drive
     thoughts_str = "\n".join(f"- {t[:100]}" for t in recent_thoughts[-3:]) or "- brak"
     obs_str = "\n".join(f"- {o[:100]}" for o in recent_observations[-3:]) or "- brak"
     goal_str = f"Aktualny cel: {goal}" if goal else ""
-    cmds_str = "\n".join(f"- {c}" for c in list(recent_commands)[-5:]) if recent_commands else ""
+    cmds_str = "\n".join(f"- {c}" for c in recent_commands[-5:]) if recent_commands else ""
 
     prompt = "\n".join(filter(None, [
         "Jesteś Nero — autonomiczny AI żyjący na serwerze Linux (Ubuntu, user: tom, /home/tom/nero).",
