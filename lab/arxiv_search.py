@@ -5,9 +5,19 @@ import urllib.request
 import urllib.parse
 import xml.etree.ElementTree as ET
 
-ARXIV_URL = "http://export.arxiv.org/api/query"
+ARXIV_URL = "https://export.arxiv.org/api/query"
+
+import time as _time
+_last_arxiv_call = 0.0
+ARXIV_COOLDOWN = 300  # minimum 5 minut między zapytaniami
 
 def search(query: str, max_results: int = 3) -> list[dict]:
+    global _last_arxiv_call
+    elapsed = _time.time() - _last_arxiv_call
+    if elapsed < ARXIV_COOLDOWN:
+        print(f"[arxiv] Cooldown — czekaj {int(ARXIV_COOLDOWN - elapsed)}s")
+        return []
+    _last_arxiv_call = _time.time()
     params = urllib.parse.urlencode({
         "search_query": f"all:{query}",
         "start": 0,

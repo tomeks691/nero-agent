@@ -53,11 +53,23 @@ def run_coordinator(goal: str, memory, brain, log_fn=print) -> str | None:
     Zwraca syntetyczny wniosek lub None.
     """
     log_fn(f"[coordinator] 3 workery → {goal[:70]}")
+
+    # Wygeneruj krótkie zapytanie po angielsku (max 5 słów) dla web/arxiv
+    query_prompt = (
+        f"Convert this research goal to a SHORT English search query (max 5 words, no punctuation):\n{goal}\n\nQuery:"
+    )
+    search_query = brain.ask(query_prompt, max_tokens=15, temp=0.3)
+    if search_query:
+        search_query = search_query.strip().strip('"').split("\n")[0][:60]
+    else:
+        search_query = goal[:60]
+    log_fn(f"[coordinator] Query: {search_query}")
+
     results = {}
 
     threads = [
-        threading.Thread(target=_worker_web,    args=(goal, results),         daemon=True),
-        threading.Thread(target=_worker_arxiv,  args=(goal, results),         daemon=True),
+        threading.Thread(target=_worker_web,    args=(search_query, results),         daemon=True),
+        threading.Thread(target=_worker_arxiv,  args=(search_query, results),         daemon=True),
         threading.Thread(target=_worker_memory, args=(goal, memory, results), daemon=True),
     ]
 
