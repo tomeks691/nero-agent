@@ -10,7 +10,7 @@ load_dotenv(Path(__file__).parent / ".env")
 sys.path.insert(0, "/home/tom/nero")
 
 from core.consciousness import NeroConsciousness
-from comms.discord_bot import start_bot_background, send_message_sync
+from comms.discord_bot import start_bot_background, send_message_sync, push_event
 from comms.npu_agent import start_npu_server, stop_npu_server
 import core.brain as brain
 
@@ -55,6 +55,8 @@ def main():
             import traceback
             print(f"[nero] BLAD w step(): {e}")
             traceback.print_exc()
+            if discord_ok:
+                push_event("error", f"Błąd w step(): {str(e)[:120]}")
         time.sleep(TICK_INTERVAL)
 
 if __name__ == "__main__":

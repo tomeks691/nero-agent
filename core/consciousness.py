@@ -16,6 +16,10 @@ from memory.memory import NeroMemory
 from memory.dream import start_dream_background, is_dreaming, should_dream
 from memory.cron import get_due_jobs, mark_fired, list_jobs, add_job, delete_job
 from memory.skill_improvement import start_skill_improvement_background, read_all_skills
+from memory.extract_memories import extract_and_store
+from core.coordinator import run_coordinator
+from tools.browser import browse
+from comms.discord_bot import inbox_pop_all, push_event
 from memory.drives import NeroDrives
 from lab.web_search import research
 import core.brain as brain
@@ -30,7 +34,6 @@ from lab.rss_feed import fetch_hn_top, headlines_text
 from memory.notebook import append_note, list_topics
 from memory.scheduler import get_due, mark_done
 from tools.world_info import world_context, current_time
-from comms.discord_bot import inbox_pop_all
 
 LOG_FILE = "/home/tom/nero/logs/consciousness.log"
 
@@ -344,6 +347,7 @@ class NeroConsciousness:
             complete_task(task['id'])
             self._pending_messages.append(report)
             self.memory.store(f"Zadanie wykonane: {task['content'][:80]}", "conclusion")
+            push_event("task_done", f"Zadanie ukończone: {task['content'][:80]}")
 
         # Myśl
         thought = self._think()
@@ -395,6 +399,18 @@ class NeroConsciousness:
                 self._last_message_tick = self.tick
                 self._last_message_topic = topic
 
+        elif self.drives.drives["curiosity"] > 0.75 and random.random() < 0.25:
+            # Coordinator Mode — równoległe badania gdy bardzo ciekaw
+            subgoal = self.subgoal or self.goal
+            if subgoal:
+                synthesis = run_coordinator(subgoal, self.memory, brain, self._log)
+                if synthesis:
+                    self.memory.store(synthesis, "conclusion", {"source": "coordinator"})
+                    extract_and_store(synthesis, "coordinator", self.memory, brain, self._log)
+                    self.drives.boost("curiosity", +0.15)
+                    self.drives.boost("excitement", +0.3)
+                    push_event("coordinator", f"Nowe odkrycie: {synthesis[:100]}")
+
         elif self.drives.drives["curiosity"] > 0.5 and random.random() < 0.4:
             # Szukaj w internecie — NPU streszcza wyniki jeśli dostępne
             recent_thoughts = [m["content"] for m in self.memory.recent(5, memory_type="thought")]
@@ -406,7 +422,12 @@ class NeroConsciousness:
                 result = research(query)
                 if result["found"]:
                     content = result["content"]
-                    # NPU szybko streszcza surowy tekst zanim brain go analizuje
+                    # Jeśli snippet zbyt krótki — użyj pełnej przeglądarki
+                    if len(content) < 300 and result.get("url"):
+                        self._log(f"[browser] Snippet krótki — otwieram pełną stronę")
+                        br = browse(result["url"])
+                        if br["found"]:
+                            content = br["content"]
                     if npu_ready():
                         summary = summarize(content, max_words=80)
                         if summary:
@@ -415,6 +436,7 @@ class NeroConsciousness:
                     conclusion = brain.analyze_web_content(query, content, self.drives.drives)
                     if conclusion:
                         self.memory.store(conclusion, "observation", {"source": result["url"], "query": query})
+                        extract_and_store(content, result.get("url", "web"), self.memory, brain, self._log)
                         self._log(f"[web] Wniosek: {conclusion[:80]}")
                         self.drives.boost("curiosity", +0.1)
                         self.drives.boost("excitement", +0.2)
@@ -436,6 +458,7 @@ class NeroConsciousness:
                     conclusion = brain.analyze_web_content(query, content, self.drives.drives)
                     if conclusion:
                         self.memory.store(conclusion, "conclusion", {"source": "arxiv", "query": query})
+                        extract_and_store(content, "arxiv:" + query, self.memory, brain, self._log)
                         self._log("[arxiv] Wniosek: " + conclusion[:80])
                         topic = query.split()[0].lower() if query else "research"
                         append_note(topic, conclusion)

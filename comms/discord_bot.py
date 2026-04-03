@@ -107,3 +107,24 @@ def start_bot_background():
 def send_message_sync(text: str):
     if _bot and _loop:
         asyncio.run_coroutine_threadsafe(_bot.send(text), _loop)
+
+
+# Push notification events — wysyłane natychmiast, niezależnie od drives
+PUSH_ICONS = {
+    "task_done":    "✅",
+    "error":        "⚠️",
+    "discovery":    "🔬",
+    "dream_done":   "💭",
+    "skill_update": "📝",
+    "coordinator":  "🔀",
+    "low_resources":"⚡",
+    "info":         "ℹ️",
+}
+
+def push_event(event_type: str, message: str):
+    """
+    Wyślij natychmiastowe powiadomienie event-driven na Discord.
+    event_type: task_done | error | discovery | dream_done | skill_update | coordinator | info
+    """
+    icon = PUSH_ICONS.get(event_type, "🔔")
+    send_message_sync(f"{icon} {message}")
