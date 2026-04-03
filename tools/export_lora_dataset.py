@@ -12,7 +12,7 @@ sys.path.insert(0, "/home/tom/nero")
 from memory.memory import NeroMemory
 
 OUTPUT_FILE = Path("/home/tom/nero/lora/dataset.jsonl")
-MIN_EMOTION_WEIGHT = 0.3
+MIN_EMOTION_WEIGHT = 0.0
 MAX_SAMPLES = 600
 
 SYSTEM_PROMPT = (
@@ -27,7 +27,7 @@ def build_pairs(memory: NeroMemory) -> list[dict]:
 
     # 1. Pary konwersacyjne — Tomek pyta, Nero odpowiada
     convs = memory.scroll_with_ids(memory_type="conversation", limit=500)
-    convs = [c for c in convs if c.get("emotion_weight", 0) >= MIN_EMOTION_WEIGHT]
+    convs = convs  # zbierz wszystkie
     
     user_msgs = [c for c in convs if c["content"].startswith("Użytkownik:")]
     nero_msgs = {c["timestamp"][:16]: c for c in convs if c["content"].startswith("Nero:")}
@@ -50,7 +50,7 @@ def build_pairs(memory: NeroMemory) -> list[dict]:
 
     # 2. Wnioski z badań — wysokoemocjonalne
     conclusions = memory.scroll_with_ids(memory_type="conclusion", limit=400)
-    conclusions = [c for c in conclusions if c.get("emotion_weight", 0) >= 0.4]
+    conclusions = conclusions  # zbierz wszystkie
     
     for c in conclusions[:150]:
         pairs.append({
@@ -62,7 +62,7 @@ def build_pairs(memory: NeroMemory) -> list[dict]:
 
     # 3. Myśli — głębsze i emocjonalne
     thoughts = memory.scroll_with_ids(memory_type="thought", limit=400)
-    thoughts = [t for t in thoughts if t.get("emotion_weight", 0) >= 0.45]
+    thoughts = thoughts  # zbierz wszystkie
     
     for t in thoughts[:150]:
         pairs.append({
