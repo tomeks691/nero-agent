@@ -245,12 +245,34 @@ class NeroConsciousness:
 
     def step(self):
         """Jeden krok życia Nero"""
+        # Inbox zawsze na początku — nawet w conv mode
+        inbox_msgs = inbox_pop_all()
+
+        # Conversation mode — tylko inbox, bez ticków badawczych
+        if self._conv_mode:
+            if inbox_msgs:
+                self._conv_ticks_without_msg = 0
+                self._last_user_time = time.time()
+                for msg in inbox_msgs:
+                    self._log(f"[discord inbox] {msg['author']}: {msg['content'][:80]}")
+                    self.respond_to_user(msg['content'])
+            else:
+                self._conv_ticks_without_msg += 1
+                if self._conv_ticks_without_msg >= 4:
+                    recent_conv = [m['content'] for m in self.memory.recent(6, memory_type='conversation')]
+                    if brain.should_exit_conversation_mode(recent_conv):
+                        self._conv_mode = False
+                        self._conv_ticks_without_msg = 0
+                        self._log('[conv] Rozmowa zakonczona — wracam do badan')
+            if self._conv_mode:
+                self.drives.save()
+                return  # bez tick counter, bez badań
+
+        # Normalny tick
         self.tick += 1
         self.drives.tick(1)
         self._log(f"--- Tick {self.tick} | drives: {self.drives.dominant()} ---")
 
-        # Wiadomości z Discord inbox (bufor gdy bot był offline)
-        inbox_msgs = inbox_pop_all()
         if inbox_msgs:
             # Away summary — jeśli Tomek nie pisał > 2h, przywitaj go podsumowaniem
             hours_away = (time.time() - self._last_user_time) / 3600
@@ -268,30 +290,15 @@ class NeroConsciousness:
             for msg in inbox_msgs:
                 self._log(f"[discord inbox] {msg['author']}: {msg['content'][:80]}")
                 self.respond_to_user(msg['content'])
-            # Czy wiadomosc wymaga trybu skupionej rozmowy? (synchronicznie — przed sprawdzeniem flagi)
-            if not self._conv_mode:
-                ctx = [m['content'] for m in self.memory.recent(3, memory_type='conversation')]
-                last_msg = inbox_msgs[-1]['content']
-                if brain.should_enter_conversation_mode(last_msg, ctx):
-                    self._conv_mode = True
-                    self._conv_ticks_without_msg = 0
-                    self._log('[conv] Wchodze w tryb skupionej rozmowy')
-            else:
+            # Czy wiadomosc wymaga trybu skupionej rozmowy?
+            ctx = [m['content'] for m in self.memory.recent(3, memory_type='conversation')]
+            last_msg = inbox_msgs[-1]['content']
+            if brain.should_enter_conversation_mode(last_msg, ctx):
+                self._conv_mode = True
                 self._conv_ticks_without_msg = 0
-        # Conversation mode — zawieś ticki badawcze podczas głębokiej rozmowy
-        if self._conv_mode:
-            if not inbox_msgs:
-                self._conv_ticks_without_msg += 1
-            # Auto-wyjście po 4 tickach bez wiadomości
-            if self._conv_ticks_without_msg >= 4:
-                recent_conv = [m['content'] for m in self.memory.recent(6, memory_type='conversation')]
-                if brain.should_exit_conversation_mode(recent_conv):
-                    self._conv_mode = False
-                    self._conv_ticks_without_msg = 0
-                    self._log('[conv] Rozmowa zakończona — wracam do badań')
-            if self._conv_mode:
+                self._log('[conv] Wchodze w tryb skupionej rozmowy')
                 self.drives.save()
-                return  # zawieś wszystkie ticki badawcze
+                return  # od razu zawieś — nie rób badań w tym ticku
         if self.tick % 10 == 0:
             self._print_stats()
         if self.tick % 15 == 0:
