@@ -80,7 +80,7 @@ class NeroConsciousness:
 
         # Pamiec: szukaj wspomnien POWIAZANYCH z tematem agendy, nie najnowszych
         search_query = agenda_topic or self.drives.dominant()
-        mem_hits = self.memory.search(search_query, top_k=4) if search_query else []
+        mem_hits = self.memory.emotional_search(search_query, top_k=4, drives=self.drives.drives) if search_query else []
         mem_context = "\n".join(f"- {m['content'][:120]}" for m in mem_hits) if mem_hits else None
 
         # Agenda summary + skill files jako kontekst
@@ -101,7 +101,7 @@ class NeroConsciousness:
             recent_creations=recent_c,
             memory_context=full_context
         )
-        self.memory.store(thought, "thought")
+        self.memory.store(thought, "thought", drives=self.drives.drives)
 
         # Co 20 tickow — Nero ocenia postepy i aktualizuje agenda
         if self.tick % 20 == 0 and current_agenda:
@@ -128,7 +128,7 @@ class NeroConsciousness:
     def respond_to_user(self, message: str):
         """Wiadomość od Tomka — Gemma odpowiada w osobnym wątku z priority lock."""
         self.drives.on_conversation()
-        self.memory.store(f"Użytkownik: {message}", "conversation")
+        self.memory.store(f"Użytkownik: {message}", "conversation", drives=self.drives.drives)
         lower = message.lower()
         task_triggers = ["zapamiętaj", "zapamiętac", "zrób mi", "zrob mi", "przypomnij",
                          "zadanie:", "todo:", "please do", "remember that", "don't forget"]
@@ -154,7 +154,7 @@ class NeroConsciousness:
                 memory_context=f"Historia rozmowy:\n{history}" if history else None
             )
             if thought:
-                self.memory.store(f"Nero: {thought}", "conversation")
+                self.memory.store(f"Nero: {thought}", "conversation", drives=self.drives.drives)
                 self._log(f"[→ Discord reply] {thought[:120]}")
                 send_message_sync(thought)
 
@@ -326,6 +326,8 @@ class NeroConsciousness:
                 self._log('[conv] Wchodze w tryb skupionej rozmowy')
                 self.drives.save()
                 return  # od razu zawieś — nie rób badań w tym ticku
+        if self.tick % 480 == 0:
+            self.memory.decay_old_memories(days_threshold=7)
         if self.tick % 10 == 0:
             self._print_stats()
         if self.tick % 15 == 0:
@@ -406,7 +408,7 @@ class NeroConsciousness:
                 report = f"Rozumiem: {task['content'][:80]}"
             complete_task(task['id'])
             self._pending_messages.append(report)
-            self.memory.store(f"Zadanie wykonane: {task['content'][:80]}", "conclusion")
+            self.memory.store(f"Zadanie wykonane: {task['content'][:80]}", "conclusion", drives=self.drives.drives)
             push_event("task_done", f"Zadanie ukończone: {task['content'][:80]}")
 
         # Myśl
@@ -465,7 +467,7 @@ class NeroConsciousness:
             if subgoal:
                 synthesis = run_coordinator(subgoal, self.memory, brain, self._log)
                 if synthesis:
-                    self.memory.store(synthesis, "conclusion", {"source": "coordinator"})
+                    self.memory.store(synthesis, "conclusion", {"source": "coordinator"}, drives=self.drives.drives)
                     extract_and_store(synthesis, "coordinator", self.memory, brain, self._log)
                     self.drives.boost("curiosity", +0.15)
                     self.drives.boost("excitement", +0.3)
@@ -495,7 +497,7 @@ class NeroConsciousness:
                             self._log(f"[npu] Streszczenie: {summary[:80]}")
                     conclusion = brain.analyze_web_content(query, content, self.drives.drives)
                     if conclusion:
-                        self.memory.store(conclusion, "observation", {"source": result["url"], "query": query})
+                        self.memory.store(conclusion, "observation", {"source": result["url"], "query": query}, drives=self.drives.drives)
                         extract_and_store(content, result.get("url", "web"), self.memory, brain, self._log)
                         self._log(f"[web] Wniosek: {conclusion[:80]}")
                         self.drives.boost("curiosity", +0.1)
@@ -531,7 +533,7 @@ class NeroConsciousness:
             exp = self.lab.pick_experiment()
             exp = self.lab.run(exp)
             if exp.conclusion:
-                self.memory.store(exp.conclusion, "conclusion", {"type": "experiment", "exp_id": exp.id})
+                self.memory.store(exp.conclusion, "conclusion", {"type": "experiment", "exp_id": exp.id}, drives=self.drives.drives)
                 self._log(f"[lab] {exp.conclusion[:100]}")
                 if exp.success:
                     self.drives.boost("excitement", +0.2)

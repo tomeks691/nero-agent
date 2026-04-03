@@ -35,12 +35,24 @@ class NeroMemory:
     def _embed(self, text: str) -> list[float]:
         return list(self.encoder.embed([text]))[0].tolist()
 
-    def store(self, content: str, memory_type: str = "thought", metadata: dict = None):
+    def store(self, content: str, memory_type: str = "thought", metadata: dict = None, drives: dict = None):
         assert memory_type in MEMORY_TYPES, f"Nieznany typ: {memory_type}"
+        # Waga emocjonalna — silne drives = ważniejsze wspomnienie
+        emotion_weight = 0.5  # default
+        if drives:
+            emotion_weight = min(1.0, (
+                drives.get("excitement", 0) * 0.4 +
+                drives.get("curiosity", 0) * 0.3 +
+                drives.get("satisfaction", 0) * 0.2 +
+                drives.get("frustration", 0) * 0.1
+            ))
         payload = {
             "content": content,
             "type": memory_type,
             "timestamp": datetime.now().isoformat(),
+            "emotion_weight": round(emotion_weight, 3),
+            "access_count": 0,
+            "last_accessed": datetime.now().isoformat(),
             **(metadata or {})
         }
         self.client.upsert(
@@ -65,6 +77,46 @@ class NeroMemory:
         memories = [r.payload for r in results]
         memories.sort(key=lambda x: x.get("timestamp", ""), reverse=True)
         return memories[:n]
+
+    def emotional_search(self, query: str, top_k: int = 5, drives: dict = None) -> list[dict]:
+        """Wyszukiwanie z uwzględnieniem wagi emocjonalnej — intensywne drives = priorytet emocjonalnych wspomnień."""
+        results = self.search(query, top_k=top_k * 2)
+        if not drives:
+            return results[:top_k]
+        intensity = max(drives.values()) if drives else 0.5
+        # Rerank: score = semantic_score * (1 + emotion_weight * intensity)
+        for r in results:
+            ew = r.get("emotion_weight", 0.5)
+            r["_reranked"] = r["score"] * (1 + ew * intensity)
+        results.sort(key=lambda x: x["_reranked"], reverse=True)
+        return results[:top_k]
+
+    def decay_old_memories(self, days_threshold: int = 7):
+        """Obniż wagę emocjonalną starych wspomnień które nie były przywoływane."""
+        from datetime import timedelta
+        import time as _time
+        cutoff = (datetime.now() - timedelta(days=days_threshold)).isoformat()
+        try:
+            results, _ = self.client.scroll(
+                collection_name=COLLECTION, limit=500,
+                with_payload=True, with_vectors=False
+            )
+            to_update = []
+            for r in results:
+                last = r.payload.get("last_accessed", r.payload.get("timestamp", ""))
+                ew = r.payload.get("emotion_weight", 0.5)
+                if last < cutoff and ew > 0.1:
+                    to_update.append((str(r.id), round(ew * 0.85, 3)))
+            for point_id, new_weight in to_update:
+                self.client.set_payload(
+                    collection_name=COLLECTION,
+                    payload={"emotion_weight": new_weight},
+                    points=[point_id]
+                )
+            if to_update:
+                print(f"[memory] Decay: obniżono wagę {len(to_update)} starych wspomnień")
+        except Exception as e:
+            print(f"[memory] Decay error: {e}")
 
     def count(self) -> int:
         return self.client.count(COLLECTION).count
